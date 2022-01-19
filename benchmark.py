@@ -13,15 +13,17 @@ class test:
     def __init__(self):
         self.job = 2
         self.machine = 5
+        self.machines_per_operation = 666
+
         self.table_np = np.array([[2,      6,      5,      3,      4],
                                   [np.inf, 8,      np.inf, 4,      np.inf],
                                   [3,      np.inf, 6,      np.inf, 5],
                                   [4,      6,      5,      np.inf, np.inf],
                                   [np.inf, 7,      11,     5,      8]])
-        self.table_pd = pd.DataFrame(data=self.table_np, columns=range(self.machine), index=[11, 12, 21, 22, 23])
-        self.dimension = self.table_np.shape[0]
-        self.optimum_makespan = 888
-        self.total_operation = self.dimension * self.machine
+
+        self.table_pd = pd.DataFrame(data=self.table_np)
+
+        self.total_operation = 5
 
 
 class mk01:
@@ -30,7 +32,6 @@ class mk01:
         self.job = int(self.table_raw.loc[0, 0])
         self.machine = int(self.table_raw.loc[0, 1])
         self.machines_per_operation = self.table_raw.loc[0, 2]
-        self.optimum_makespan = 36
         self.table_ok = self.table_raw.loc[1:, 0].str.split(expand=True).astype(float)
         self.total_operation = int(self.table_ok[0].sum())
         self.table_ok.drop([0],  axis=1, inplace=True)
