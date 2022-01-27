@@ -66,6 +66,94 @@ class GA():
             
             self.X = self.X + self.V # 更新X
             self.X = np.clip(self.X, self.lb, self.ub) # 邊界處理
+    
+    # 雙點交配 (two-point crossover)
+    def TPX(self, p1, p2):
+        # 取得任意兩點
+        D = len(p1)
+        boundary = np.random.choice(D, size=2, replace=False)
+        boundary.sort()
+        start, end = boundary[0], boundary[1]
+
+        # 交換
+        c1 = p1.copy()
+        c2 = p2.copy()
+        c1[start:end] = p2[start:end]
+        c2[start:end] = p1[start:end]
+
+        return c1, c2
+
+    # 均勻交配 (uniform crossover)
+    def UX(self, p1, p2):
+        # 隨機選定欲交換的位置
+        D = len(p1)
+        mask = np.random.choice(2, size=D, replace=True).astype(bool)
+
+        # 交換
+        c1 = p1.copy()
+        c2 = p2.copy()
+        c1[mask] = p2[mask]
+        c2[mask] = p1[mask]
+
+        return c1, c2
+
+    # precedence preserving orderbased crossover (POX)
+    def POX(self, p1, p2):
+        # 提取所有元素的唯一值，並且打亂
+        operation_set = np.unique(np.hstack([p1, p2]))
+        np.random.shuffle(operation_set)
+        # 初始化
+        D = len(p1)
+        c1 = np.zeros(D) - 1
+        c2 = np.zeros(D) - 1
+
+        # 隨機選定欲保留的元素
+        spam1 = np.random.choice(2, size=len(operation_set), replace=True).astype(bool)
+        Js1 = operation_set[spam1]
+        mask1 = np.isin(p1, Js1)
+        # 交換
+        c1[mask1] = p1[mask1]
+        c1[~mask1] = p2[~np.isin(p2, Js1)]
+
+        # 隨機選定欲保留的元素
+        spam2 = np.random.choice(2, size=len(operation_set), replace=True).astype(bool)
+        Js2 = operation_set[spam2]
+        mask2 = np.isin(p2, Js2)
+        # 交換
+        c2[mask2] = p2[mask2]
+        c2[~mask2] = p1[~np.isin(p1, Js2)]
+
+        return c1, c2
+
+    # 作者自己發明的
+    def machine_mutation(self, p1):
+        # 為每一位置產生亂數
+        c1 = p1.copy()
+        r = np.random.uniform(size=self.D / 2)
+
+        for idx, val in enumerate(p1):
+            # 若亂數小於等於突變率，則對該位置進行突變 (放入最小時間的機台)
+            if r[idx] <= self.pm:
+                alternative_machine_set = self.table_np[idx]
+                shortest_machine = alternative_machine_set.argmin()
+                c1[idx] = shortest_machine
+
+        return c1
+
+    # 交換突變 (swap mutation)
+    def swap_mutation(self, p1):
+        # 為每一位置產生亂數
+        D = len(p1)
+        c1 = p1.copy()
+        r = np.random.uniform(size=D)
+
+        for idx1, val in enumerate(p1):
+            # 若亂數小於等於突變率，則對該位置進行突變 (隨機與其他位置交換)
+            if r[idx1] <= 0.5:
+                idx2 = np.random.choice(np.delete(np.arange(D), idx1))
+                c1[idx1], c1[idx2] = c1[idx2], c1[idx1]
+
+        return c1
 
     def plot_curve(self):
         plt.figure()

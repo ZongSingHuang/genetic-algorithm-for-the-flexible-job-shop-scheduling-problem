@@ -37,7 +37,7 @@ for t in range(run_times):
     # table.loc[item, 't'] += ed - st
 
     item += 1
-    mk01 = benchmark.mk01(path=r'BRdata\Mk01.fjs')
+    mk01 = benchmark.decoding(path=r'BRdata\Mk01.fjs')
     # optimizer = GA(fitness=benchmark.Sphere,
     #                D=mk01.total_operation * 2, P=P, G=G)
     st = time.time()

@@ -26,7 +26,7 @@ class test:
         self.total_operation = 5
 
 
-class mk01:
+class decoding:
     def __init__(self, path):
         self.table_raw = pd.read_table(path, header=None)
         self.job = int(self.table_raw.loc[0, 0])
