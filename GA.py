@@ -10,21 +10,24 @@ np.random.seed(42)
 
 
 class GA():
-    def __init__(self, fitness, D, P, G=100,
-                 GS=0.6, LS=0.3, RS=0.1,
-                 pc=0.7, two=0.5, uniform=0.5,
-                 pm=0.01):
+    def __init__(self, fitness, D, P, job, machine, operation, table_np, table_pd,
+                 G=100, GS=0.6, LS=0.3, RS=0.1, pc=0.7, pTPX=0.5, pUX=0.5, pm=0.01):
         self.fitness = fitness
         self.D = D
         self.P = P
         self.G = G
+        self.job = job
+        self.machine = machine
+        self.operation = operation
         self.GS = GS
         self.LS = LS
         self.RS = RS
         self.pc = pc
-        self.two = two
-        self.uniform = uniform
+        self.pTPX = pTPX
+        self.pUX = pUX
         self.pm = pm
+        self.table_np = table_np
+        self.table_pd = table_pd
 
         self.X_pbest = np.zeros([self.P, self.D])
         self.F_pbest = np.zeros([self.P]) + np.inf
@@ -34,40 +37,155 @@ class GA():
 
     def opt(self):
         # 初始化
-        self.X = np.random.uniform(low=self.lb, high=self.ub, size=[self.P, self.D])
-        self.V = np.zeros([self.P, self.D])
-        
+        X1 = []
+
+        # 初始化 : MS
+        P_gs = int(self.P * self.GS)
+        for idx_chromosome in range(P_gs):
+            chromosome = self.global_selection()
+            X1.append(chromosome)
+
+        P_ls = int(self.P * self.LS)
+        for idx_chromosome in range(P_ls):
+            chromosome = self.local_selection()
+            X1.append(chromosome)
+
+        P_rs = int(self.P * self.RS)
+        for idx_chromosome in range(P_rs):
+            chromosome = self.random_selection()
+            X1.append(chromosome)
+
+        X1 = np.array(X1)
+
+        # 初始化 : OS
+        spam = self.table_pd['job'].values
+        X2 = []
+        for i in range(self.P):
+            np.random.shuffle(spam)
+            X2.append(spam.copy())
+
+        X2 = np.array(X2)
+
+        # 合併 : MS、OS
+        self.X = np.hstack([X1, X2])
+
+        # 適應值計算
+        F = self.fitness(self.X)
+
         # 迭代
         for g in range(self.G):
+            # 更新最佳解
+            if np.min(F) < self.F_gbest:
+                idx = F.argmin()
+                self.X_gbest = self.X[idx].copy()
+                self.F_gbest = F.min()
+
+            # 收斂曲線
+            self.loss_curve[g] = self.F_gbest
+
+            # 選擇
+            X_new = np.zeros_like(self.X)
+            for i in range(self.P):
+                X_new[i] = self.selection(self.X, F)
+            self.X = X_new.copy()
+
+            # 交配
+            for i in range(self.P):
+                p = np.random.uniform()
+                if p < self.pc:
+                    p_idx = np.random.choice(self.P, size=2, replace=False)
+                    p1 = self.X[p_idx[0]]
+                    p2 = self.X[p_idx[1]]
+
+                    # MS
+                    r = np.random.uniform()
+                    if r <= self.pTPX:
+                        p1[:self.operation], p2[:self.operation] = self.TPX(p1[:self.operation], p2[:self.operation])
+                    else:
+                        p1[:self.operation], p2[:self.operation] = self.UX(p1[:self.operation], p2[:self.operation])
+
+                    # OS
+                    p1[self.operation:], p2[self.operation:] = self.POX(p1[self.operation:], p2[self.operation:])
+                self.X[p_idx[0]] = p1
+                self.X[p_idx[1]] = p2
+
+            # 突變
+            for i in range(self.P):
+                p = np.random.uniform()
+                if p < self.pm:
+                    p1 = self.X[i]
+                    p1[:self.operation] = self.machine_mutation(p1[:self.operation])
+                    p1[self.operation:] = self.swap_mutation(p1[self.operation:])
+
             # 適應值計算
             F = self.fitness(self.X)
-            
-            # 更新最佳解
-            mask = F < self.pbest_F
-            self.pbest_X[mask] = self.X[mask].copy()
-            self.pbest_F[mask] = F[mask].copy()
-            
-            if np.min(F) < self.gbest_F:
-                idx = F.argmin()
-                self.gbest_X = self.X[idx].copy()
-                self.gbest_F = F.min()
-            
-            # 收斂曲線
-            self.loss_curve[g] = self.gbest_F
-            
-            # 更新
-            r1 = np.random.uniform(size=[self.P, self.D])
-            r2 = np.random.uniform(size=[self.P, self.D])
-            w = self.w_max - (self.w_max-self.w_min)*(g/self.G)
-            
-            self.V = w * self.V + self.c1 * (self.pbest_X - self.X) * r1 \
-                                + self.c2 * (self.gbest_X - self.X) * r2 # 更新V
-            self.V = np.clip(self.V, -self.v_max, self.v_max) # 邊界處理
-            
-            self.X = self.X + self.V # 更新X
-            self.X = np.clip(self.X, self.lb, self.ub) # 邊界處理
-    
-    # 雙點交配 (two-point crossover)
+
+    # 初始化 1 (global selection, 作者自己發明的)
+    def global_selection(self):
+        sequence = np.random.choice(self.job, size=self.job, replace=False)
+        MS = []
+        time_array = np.zeros(self.operation)
+
+        for idx_job in sequence:
+            mask = self.table_pd['job'] == idx_job
+            table = self.table_pd[mask]
+
+            for idx, row in table.iterrows():
+                processing_time = row.iloc[:-2].values
+                added_time = time_array + processing_time
+                selected_machine = added_time.argmin()
+                time_array[selected_machine] = added_time[selected_machine]
+                MS.append(selected_machine)
+
+        return MS
+
+    # 初始化 2 (local selection, 作者自己發明的)
+    def local_selection(self):
+        sequence = np.random.choice(self.job, size=self.job, replace=False)
+        MS = []
+
+        for idx_job in sequence:
+            time_array = np.zeros(self.operation)
+            mask = self.table_pd['job'] == idx_job
+            table = self.table_pd[mask]
+
+            for idx, row in table.iterrows():
+                processing_time = row.iloc[:-2].values
+                added_time = time_array + processing_time
+                selected_machine = added_time.argmin()
+                time_array[selected_machine] = added_time[selected_machine]
+                MS.append(selected_machine)
+
+        return MS
+
+    # 初始化 3 (random selection, 作者自己發明的)
+    def random_selection(self):
+        sequence = np.random.choice(self.job, size=self.job, replace=False)
+        MS = []
+
+        for idx_job in sequence:
+            mask = self.table_pd['job'] == idx_job
+            table = self.table_pd[mask]
+
+            for idx, row in table.iterrows():
+                processing_time = row.iloc[:-2].values
+                spam = np.where(processing_time != np.inf)[0]
+                selected_machine = np.random.choice(spam, size=1)[0]
+                MS.append(selected_machine)
+
+        return MS
+
+    # 選擇 (tournament selection, 競爭式選擇)
+    def selection(self, X, F, num=3):
+        mask = np.random.choice(self.P, size=num, replace=True)
+        F_selected = F[mask]
+        X_selected = X[mask]
+        c1_idx = F_selected.argmin()
+        c1 = X_selected[c1_idx]
+
+        return c1
+
+    # 交配 1 (two-point crossover, 雙點交配)
     def TPX(self, p1, p2):
         # 取得任意兩點
         D = len(p1)
@@ -83,7 +201,7 @@ class GA():
 
         return c1, c2
 
-    # 均勻交配 (uniform crossover)
+    # 交配 2 (uniform crossover, 均勻交配)
     def UX(self, p1, p2):
         # 隨機選定欲交換的位置
         D = len(p1)
@@ -97,7 +215,7 @@ class GA():
 
         return c1, c2
 
-    # precedence preserving orderbased crossover (POX)
+    # 交配 3 (precedence preserving order-based crossover, POX)
     def POX(self, p1, p2):
         # 提取所有元素的唯一值，並且打亂
         operation_set = np.unique(np.hstack([p1, p2]))
@@ -125,11 +243,12 @@ class GA():
 
         return c1, c2
 
-    # 作者自己發明的
+    # 突變 1 (作者自己發明的)
     def machine_mutation(self, p1):
         # 為每一位置產生亂數
+        D = len(p1)
         c1 = p1.copy()
-        r = np.random.uniform(size=self.D / 2)
+        r = np.random.uniform(size=D)
 
         for idx, val in enumerate(p1):
             # 若亂數小於等於突變率，則對該位置進行突變 (放入最小時間的機台)
@@ -140,7 +259,7 @@ class GA():
 
         return c1
 
-    # 交換突變 (swap mutation)
+    # 突變 2 (swap mutation, 交換突變)
     def swap_mutation(self, p1):
         # 為每一位置產生亂數
         D = len(p1)

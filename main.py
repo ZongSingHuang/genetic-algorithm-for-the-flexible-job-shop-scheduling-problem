@@ -23,10 +23,11 @@ table = pd.DataFrame(np.zeros([10, 7]), columns=['nxm', 'To', 'Flex.', 'LB, UB',
 for t in range(run_times):
     item += 1
     test = benchmark.test()
-    # optimizer = GA(fitness=benchmark.Sphere,
-    #                D=test.total_operation * 2, P=P, G=G)
+    optimizer = GA(fitness=benchmark.aaa, D=test.total_operation*2, P=P,
+                   job=test.job, machine=test.machine, operation=test.total_operation,
+                   table_np=test.table_np, table_pd=test.table_pd)
     st = time.time()
-    # optimizer.opt()
+    optimizer.opt()
     ed = time.time()
     table.loc[item, 'nxm'] = f'{test.job}x{test.machine}'
     table.loc[item, 'To'] = test.total_operation
