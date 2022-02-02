@@ -37,6 +37,35 @@ class GA():
 
     def opt(self):
         # 初始化
+        self.X = self.initial_population()
+
+        # 適應值計算
+        self.F = self.fitness(self.X, self.table_np, self.table_pd)
+
+        # 迭代
+        for g in range(self.G):
+            # 更新最佳解
+            if np.min(self.F) < self.F_gbest:
+                idx = self.F.argmin()
+                self.X_gbest = self.X[idx].copy()
+                self.F_gbest = self.F.min()
+            self.loss_curve[g] = self.F_gbest
+
+            # 選擇
+            self.X = self.selection_operator()
+
+            # 交配
+            self.crossover_operator()
+
+            # 突變
+            self.mutation_operator()
+
+            # 適應值計算
+            self.F = self.fitness(self.X, self.table_np, self.table_pd)
+
+
+#%% 初始化
+    def initial_population(self):
         X1 = []
 
         # 初始化 : MS
@@ -55,70 +84,19 @@ class GA():
             chromosome = self.random_selection()
             X1.append(chromosome)
 
-        X1 = np.array(X1)
-
         # 初始化 : OS
-        spam = self.table_pd['job'].values
+        spam = self.table_pd['job'].copy().values
         X2 = []
         for i in range(self.P):
             np.random.shuffle(spam)
             X2.append(spam.copy())
 
-        X2 = np.array(X2)
-
         # 合併 : MS、OS
-        self.X = np.hstack([X1, X2])
+        X1 = np.array(X1)
+        X2 = np.array(X2)
+        X = np.hstack([X1, X2])
 
-        # 適應值計算
-        F = self.fitness(self.X)
-
-        # 迭代
-        for g in range(self.G):
-            # 更新最佳解
-            if np.min(F) < self.F_gbest:
-                idx = F.argmin()
-                self.X_gbest = self.X[idx].copy()
-                self.F_gbest = F.min()
-
-            # 收斂曲線
-            self.loss_curve[g] = self.F_gbest
-
-            # 選擇
-            X_new = np.zeros_like(self.X)
-            for i in range(self.P):
-                X_new[i] = self.selection(self.X, F)
-            self.X = X_new.copy()
-
-            # 交配
-            for i in range(self.P):
-                p = np.random.uniform()
-                if p < self.pc:
-                    p_idx = np.random.choice(self.P, size=2, replace=False)
-                    p1 = self.X[p_idx[0]]
-                    p2 = self.X[p_idx[1]]
-
-                    # MS
-                    r = np.random.uniform()
-                    if r <= self.pTPX:
-                        p1[:self.operation], p2[:self.operation] = self.TPX(p1[:self.operation], p2[:self.operation])
-                    else:
-                        p1[:self.operation], p2[:self.operation] = self.UX(p1[:self.operation], p2[:self.operation])
-
-                    # OS
-                    p1[self.operation:], p2[self.operation:] = self.POX(p1[self.operation:], p2[self.operation:])
-                self.X[p_idx[0]] = p1
-                self.X[p_idx[1]] = p2
-
-            # 突變
-            for i in range(self.P):
-                p = np.random.uniform()
-                if p < self.pm:
-                    p1 = self.X[i]
-                    p1[:self.operation] = self.machine_mutation(p1[:self.operation])
-                    p1[self.operation:] = self.swap_mutation(p1[self.operation:])
-
-            # 適應值計算
-            F = self.fitness(self.X)
+        return X
 
     # 初始化 1 (global selection, 作者自己發明的)
     def global_selection(self):
@@ -175,15 +153,46 @@ class GA():
 
         return MS
 
+
+#%% 選擇
+    def selection_operator(self):
+        X_new = np.zeros_like(self.X)
+        for i in range(self.P):
+            X_new[i] = self.tournament()
+
+        return X_new
+
     # 選擇 (tournament selection, 競爭式選擇)
-    def selection(self, X, F, num=3):
+    def tournament(self, num=3):
         mask = np.random.choice(self.P, size=num, replace=True)
-        F_selected = F[mask]
-        X_selected = X[mask]
+        F_selected = self.F[mask]
+        X_selected = self.X[mask]
         c1_idx = F_selected.argmin()
         c1 = X_selected[c1_idx]
 
         return c1
+
+
+#%% 交配
+    def crossover_operator(self):
+        for i in range(self.P):
+            p = np.random.uniform()
+            if p < self.pc:
+                p_idx = np.random.choice(self.P, size=2, replace=False)
+                p1 = self.X[p_idx[0]]
+                p2 = self.X[p_idx[1]]
+
+                # MS
+                r = np.random.uniform()
+                if r <= self.pTPX:
+                    p1[:self.operation], p2[:self.operation] = self.TPX(p1[:self.operation], p2[:self.operation])
+                else:
+                    p1[:self.operation], p2[:self.operation] = self.UX(p1[:self.operation], p2[:self.operation])
+
+                # OS
+                p1[self.operation:], p2[self.operation:] = self.POX(p1[self.operation:], p2[self.operation:])
+            self.X[p_idx[0]] = p1
+            self.X[p_idx[1]] = p2
 
     # 交配 1 (two-point crossover, 雙點交配)
     def TPX(self, p1, p2):
@@ -243,6 +252,16 @@ class GA():
 
         return c1, c2
 
+
+#%% 突變
+    def mutation_operator(self):
+        for i in range(self.P):
+            p = np.random.uniform()
+            if p < self.pm:
+                p1 = self.X[i]
+                p1[:self.operation] = self.machine_mutation(p1[:self.operation])
+                p1[self.operation:] = self.swap_mutation(p1[self.operation:])
+
     # 突變 1 (作者自己發明的)
     def machine_mutation(self, p1):
         # 為每一位置產生亂數
@@ -274,6 +293,8 @@ class GA():
 
         return c1
 
+
+#%% 其他
     def plot_curve(self):
         plt.figure()
         plt.title('loss curve ['+str(round(self.gBest_curve[-1], 3))+']')

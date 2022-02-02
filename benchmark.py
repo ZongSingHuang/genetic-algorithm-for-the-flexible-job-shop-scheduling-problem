@@ -34,6 +34,9 @@ class test:
         self.table_pd.rename(columns={self.table_pd.columns[-2]: 'job',
                                       self.table_pd.columns[-1]: 'operation'},
                              inplace=True)
+        self.table_pd['job'] = self.table_pd['job'].astype(int)
+        self.table_pd['operation'] = self.table_pd['operation'].astype(int)
+
 
 class decoding:
     def __init__(self, path):
@@ -75,8 +78,31 @@ class decoding:
         self.table_pd.rename(columns={self.table_pd.columns[-2]: 'job',
                                       self.table_pd.columns[-1]: 'operation'},
                              inplace=True)
+        self.table_pd['job'] = self.table_pd['job'].astype(int)
+        self.table_pd['operation'] = self.table_pd['operation'].astype(int)
 
 
-def aaa(X):
+def fitness(X, table_np, table_pd):
+    table_pd.set_index(table_pd['job'].astype(str) + table_pd['operation'].astype(str), inplace=True)
+    D = int(X.shape[1] / 2)
+    for idx, row in enumerate(X):
+        MS = row[:D]
+        OS = row[D:]
+        summary = get_summary(MS, OS, table_pd)
+        print(row)
     P = len(X)
     return np.random.uniform(size=P)
+
+
+def get_summary(MS, OS, table_pd):
+    spam = pd.DataFrame(OS, columns=['job'])
+    spam['operation'] = -1
+    for job in set(OS):
+        mask = spam['job'] == job
+        spam.loc[mask, 'operation'] = range(mask.sum())
+    spam['O'] = spam['job'].astype(str) + spam['operation'].astype(str)
+
+    spam[['time', 'machine']] = [(table_pd.loc[i, j], j) for i, j in zip(spam['O'], MS)]
+    spam[['job', 'operation', 'machine']] = spam[['job', 'operation', 'machine']].astype(int)
+
+    return spam

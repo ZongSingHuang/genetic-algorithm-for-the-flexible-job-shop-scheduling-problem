@@ -23,7 +23,7 @@ table = pd.DataFrame(np.zeros([10, 7]), columns=['nxm', 'To', 'Flex.', 'LB, UB',
 for t in range(run_times):
     item += 1
     test = benchmark.test()
-    optimizer = GA(fitness=benchmark.aaa, D=test.total_operation*2, P=P,
+    optimizer = GA(fitness=benchmark.fitness, D=test.total_operation*2, P=P,
                    job=test.job, machine=test.machine, operation=test.total_operation,
                    table_np=test.table_np, table_pd=test.table_pd)
     st = time.time()
@@ -39,8 +39,9 @@ for t in range(run_times):
 
     item += 1
     mk01 = benchmark.decoding(path=r'BRdata\Mk01.fjs')
-    # optimizer = GA(fitness=benchmark.Sphere,
-    #                D=mk01.total_operation * 2, P=P, G=G)
+    optimizer = GA(fitness=benchmark.fitness, D=test.total_operation*2, P=P,
+                   job=test.job, machine=test.machine, operation=test.total_operation,
+                   table_np=test.table_np, table_pd=test.table_pd)
     st = time.time()
     # optimizer.opt()
     ed = time.time()
