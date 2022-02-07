@@ -85,16 +85,85 @@ class decoding:
 def fitness(X, table_np, table_pd):
     table_pd.set_index(table_pd['job'].astype(str) + table_pd['operation'].astype(str), inplace=True)
     D = int(X.shape[1] / 2)
-    for idx, row in enumerate(X):
+    F = []
+    for _, row in enumerate(X):
         MS = row[:D]
         OS = row[D:]
-        summary = get_summary(MS, OS, table_pd)
-        print(row)
-    P = len(X)
-    return np.random.uniform(size=P)
+        number_of_machines = table_pd.columns.size - 2
+        number_of_jobs = table_pd['job'].unique().size
+        pending = get_pending(MS, OS, table_pd)
+        theoretical_limit = int(table_pd.iloc[:, :-2].replace(np.inf, 0).max(axis=0).sum())
+        fastest_start_time = np.zeros(number_of_jobs)
+
+        SPACE_columns = ['machine', 'job', 'start', 'end', 'length']
+        SPACE_data = np.zeros([number_of_machines, len(SPACE_columns)])
+        SPACE = pd.DataFrame(data=SPACE_data, columns=SPACE_columns)
+        SPACE['machine'] = range(number_of_machines)
+        SPACE['job'] = 'idle'
+        SPACE['end'] = theoretical_limit - 1
+        SPACE['length'] = theoretical_limit
+
+        GANTT = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
+
+        for _, val in pending.iterrows():
+            print(_)
+            # 取得待處理的機台、工件、所需時間
+            assigned_machine = val['machine']
+            assigned_job = val['job']
+            processing_time = val['time']
+
+            # 尋找符合條件的位置
+            mask1 = SPACE['machine'] == assigned_machine
+            mask2 = SPACE['job'] == 'idle'
+            mask3 = SPACE['length'] >= processing_time
+            tb = np.maximum(SPACE['start'], fastest_start_time[assigned_job])
+            mask4 = tb + processing_time <= SPACE['end']
+            spam = SPACE[mask1 & mask2 & mask3 & mask4].reset_index(drop=True).loc[0]
+
+            # 該筆訂單植入至 GANTT
+            tb = np.maximum(spam['start'], fastest_start_time[assigned_job])
+            GANTT.loc[spam['machine'], tb:tb+processing_time - 1] = assigned_job
+
+            # 更新 fastest_start_time, SPACE
+            fastest_start_time[assigned_job] = tb + processing_time
+            mask = SPACE['machine'] == assigned_machine
+            SPACE.drop(SPACE[mask].index, axis=0, inplace=True)
+            SPACE.reset_index(drop=True, inplace=True)
+            st, ed, job = -1, -1, None
+            for idx, i in enumerate(GANTT.loc[spam['machine']]):
+                if i != job and st == -1:
+                    st = idx
+                    job = 'idle' if i == -1 else i
+                elif i != job and st != -1:
+                    ed = idx - 1
+
+                if st != -1 and ed != -1:
+                    data = {'machine': spam['machine'],
+                            'job': job,
+                            'start': st,
+                            'end': ed,
+                            'length': ed - st + 1}
+                    SPACE = SPACE.append(data, ignore_index=True)
+                    st, ed, job = idx, -1, i
+
+            if st != -1 and ed == -1:
+                ed = idx
+                job = 'idle' if i == -1 else i
+                data = {'machine': spam['machine'],
+                        'job': job,
+                        'start': st,
+                        'end': ed,
+                        'length': ed - st + 1}
+                SPACE = SPACE.append(data, ignore_index=True)
+
+        F.append(fastest_start_time.max())
+
+    F = np.array(F)
+
+    return F
 
 
-def get_summary(MS, OS, table_pd):
+def get_pending(MS, OS, table_pd):
     spam = pd.DataFrame(OS, columns=['job'])
     spam['operation'] = -1
     for job in set(OS):
