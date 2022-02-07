@@ -4,7 +4,10 @@ Created on Wed Jun  3 16:13:49 2020
 
 @author: e10832
 """
+import time
+
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 np.random.seed(42)
 
@@ -44,6 +47,8 @@ class GA():
 
         # 迭代
         for g in range(self.G):
+            st = time.time()
+
             # 更新最佳解
             if np.min(self.F) < self.F_gbest:
                 idx = self.F.argmin()
@@ -62,6 +67,13 @@ class GA():
 
             # 適應值計算
             self.F = self.fitness(self.X, self.table_np, self.table_pd)
+
+            ed = time.time()
+            cost = ed - st
+            print(f'Iteration : {g + 1}')
+            print(f'F_gbest : {self.F_gbest}')
+            print(f'cost : {cost}')
+            print('-' * 20 + '\n')
 
 
 #%% 初始化
@@ -101,55 +113,76 @@ class GA():
     # 初始化 1 (global selection, 作者自己發明的)
     def global_selection(self):
         sequence = np.random.choice(self.job, size=self.job, replace=False)
-        MS = []
+        MS = pd.DataFrame(columns=['Machine_Selection', 'job', 'operation'])
         time_array = np.zeros(self.operation)
 
         for idx_job in sequence:
             mask = self.table_pd['job'] == idx_job
-            table = self.table_pd[mask]
+            table = self.table_pd[mask].reset_index(drop=True)
 
             for idx, row in table.iterrows():
-                processing_time = row.iloc[:-2].values
+                processing_time = row.iloc[:-3].values
                 added_time = time_array + processing_time
                 selected_machine = added_time.argmin()
                 time_array[selected_machine] = added_time[selected_machine]
-                MS.append(selected_machine)
+                data = {'Machine_Selection': selected_machine,
+                        'job': idx_job,
+                        'operation': idx}
+                MS = MS.append(data, ignore_index=True)
+
+        MS.sort_values(by=['job', 'operation'], inplace=True)
+        MS.reset_index(drop=True, inplace=True)
+        MS = MS['Machine_Selection'].tolist()
 
         return MS
 
     # 初始化 2 (local selection, 作者自己發明的)
     def local_selection(self):
         sequence = np.random.choice(self.job, size=self.job, replace=False)
-        MS = []
+        MS = pd.DataFrame(columns=['Machine_Selection', 'job', 'operation'])
 
         for idx_job in sequence:
             time_array = np.zeros(self.operation)
             mask = self.table_pd['job'] == idx_job
-            table = self.table_pd[mask]
+            table = self.table_pd[mask].reset_index(drop=True)
 
             for idx, row in table.iterrows():
-                processing_time = row.iloc[:-2].values
+                processing_time = row.iloc[:-3].values
                 added_time = time_array + processing_time
                 selected_machine = added_time.argmin()
                 time_array[selected_machine] = added_time[selected_machine]
-                MS.append(selected_machine)
+                data = {'Machine_Selection': selected_machine,
+                        'job': idx_job,
+                        'operation': idx}
+                MS = MS.append(data, ignore_index=True)
+
+        MS.sort_values(by=['job', 'operation'], inplace=True)
+        MS.reset_index(drop=True, inplace=True)
+        MS = MS['Machine_Selection'].tolist()
 
         return MS
 
     # 初始化 3 (random selection, 作者自己發明的)
     def random_selection(self):
         sequence = np.random.choice(self.job, size=self.job, replace=False)
-        MS = []
+        MS = pd.DataFrame(columns=['Machine_Selection', 'job', 'operation'])
 
         for idx_job in sequence:
             mask = self.table_pd['job'] == idx_job
-            table = self.table_pd[mask]
+            table = self.table_pd[mask].reset_index(drop=True)
 
             for idx, row in table.iterrows():
-                processing_time = row.iloc[:-2].values
+                processing_time = row.iloc[:-3].values
                 spam = np.where(processing_time != np.inf)[0]
                 selected_machine = np.random.choice(spam, size=1)[0]
-                MS.append(selected_machine)
+                data = {'Machine_Selection': selected_machine,
+                        'job': idx_job,
+                        'operation': idx}
+                MS = MS.append(data, ignore_index=True)
+
+        MS.sort_values(by=['job', 'operation'], inplace=True)
+        MS.reset_index(drop=True, inplace=True)
+        MS = MS['Machine_Selection'].tolist()
 
         return MS
 
@@ -179,8 +212,8 @@ class GA():
             p = np.random.uniform()
             if p < self.pc:
                 p_idx = np.random.choice(self.P, size=2, replace=False)
-                p1 = self.X[p_idx[0]]
-                p2 = self.X[p_idx[1]]
+                p1 = self.X[p_idx[0]].copy()
+                p2 = self.X[p_idx[1]].copy()
 
                 # MS
                 r = np.random.uniform()
@@ -191,8 +224,9 @@ class GA():
 
                 # OS
                 p1[self.operation:], p2[self.operation:] = self.POX(p1[self.operation:], p2[self.operation:])
-            self.X[p_idx[0]] = p1
-            self.X[p_idx[1]] = p2
+
+                self.X[p_idx[0]] = p1.copy()
+                self.X[p_idx[1]] = p2.copy()
 
     # 交配 1 (two-point crossover, 雙點交配)
     def TPX(self, p1, p2):
@@ -256,11 +290,10 @@ class GA():
 #%% 突變
     def mutation_operator(self):
         for i in range(self.P):
-            p = np.random.uniform()
-            if p < self.pm:
-                p1 = self.X[i]
-                p1[:self.operation] = self.machine_mutation(p1[:self.operation])
-                p1[self.operation:] = self.swap_mutation(p1[self.operation:])
+            p1 = self.X[i].copy()
+            p1[:self.operation] = self.machine_mutation(p1[:self.operation])
+            p1[self.operation:] = self.swap_mutation(p1[self.operation:])
+            self.X[i] = p1.copy()
 
     # 突變 1 (作者自己發明的)
     def machine_mutation(self, p1):
@@ -273,7 +306,7 @@ class GA():
             # 若亂數小於等於突變率，則對該位置進行突變 (放入最小時間的機台)
             if r[idx] <= self.pm:
                 alternative_machine_set = self.table_np[idx]
-                shortest_machine = alternative_machine_set.argmin()
+                shortest_machine = alternative_machine_set[:-2].argmin()
                 c1[idx] = shortest_machine
 
         return c1
@@ -287,7 +320,7 @@ class GA():
 
         for idx1, val in enumerate(p1):
             # 若亂數小於等於突變率，則對該位置進行突變 (隨機與其他位置交換)
-            if r[idx1] <= 0.5:
+            if r[idx1] <= self.pm:
                 idx2 = np.random.choice(np.delete(np.arange(D), idx1))
                 c1[idx1], c1[idx2] = c1[idx2], c1[idx1]
 

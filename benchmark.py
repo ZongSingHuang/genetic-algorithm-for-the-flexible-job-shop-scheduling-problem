@@ -36,6 +36,7 @@ class test:
                              inplace=True)
         self.table_pd['job'] = self.table_pd['job'].astype(int)
         self.table_pd['operation'] = self.table_pd['operation'].astype(int)
+        self.table_pd['O'] = self.table_pd['job'].astype(str) + self.table_pd['operation'].astype(str)
 
 
 class decoding:
@@ -80,19 +81,19 @@ class decoding:
                              inplace=True)
         self.table_pd['job'] = self.table_pd['job'].astype(int)
         self.table_pd['operation'] = self.table_pd['operation'].astype(int)
+        self.table_pd['O'] = self.table_pd['job'].astype(str) + self.table_pd['operation'].astype(str)
 
 
 def fitness(X, table_np, table_pd):
-    table_pd.set_index(table_pd['job'].astype(str) + table_pd['operation'].astype(str), inplace=True)
     D = int(X.shape[1] / 2)
     F = []
     for _, row in enumerate(X):
         MS = row[:D]
         OS = row[D:]
-        number_of_machines = table_pd.columns.size - 2
+        number_of_machines = table_pd.columns.size - 3
         number_of_jobs = table_pd['job'].unique().size
         pending = get_pending(MS, OS, table_pd)
-        theoretical_limit = int(table_pd.iloc[:, :-2].replace(np.inf, 0).max(axis=0).sum())
+        theoretical_limit = int(table_pd.iloc[:, :-3].replace(np.inf, 0).max(axis=0).sum())
         fastest_start_time = np.zeros(number_of_jobs)
 
         SPACE_columns = ['machine', 'job', 'start', 'end', 'length']
@@ -106,7 +107,6 @@ def fitness(X, table_np, table_pd):
         GANTT = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
 
         for _, val in pending.iterrows():
-            print(_)
             # 取得待處理的機台、工件、所需時間
             assigned_machine = val['machine']
             assigned_job = val['job']
@@ -133,7 +133,7 @@ def fitness(X, table_np, table_pd):
             for idx, i in enumerate(GANTT.loc[spam['machine']]):
                 if i != job and st == -1:
                     st = idx
-                    job = 'idle' if i == -1 else i
+                    job = i
                 elif i != job and st != -1:
                     ed = idx - 1
 
@@ -148,13 +148,15 @@ def fitness(X, table_np, table_pd):
 
             if st != -1 and ed == -1:
                 ed = idx
-                job = 'idle' if i == -1 else i
+                job = i
                 data = {'machine': spam['machine'],
                         'job': job,
                         'start': st,
                         'end': ed,
                         'length': ed - st + 1}
                 SPACE = SPACE.append(data, ignore_index=True)
+
+            SPACE['job'].replace(-1, 'idle', inplace=True)
 
         F.append(fastest_start_time.max())
 
@@ -171,7 +173,15 @@ def get_pending(MS, OS, table_pd):
         spam.loc[mask, 'operation'] = range(mask.sum())
     spam['O'] = spam['job'].astype(str) + spam['operation'].astype(str)
 
-    spam[['time', 'machine']] = [(table_pd.loc[i, j], j) for i, j in zip(spam['O'], MS)]
-    spam[['job', 'operation', 'machine']] = spam[['job', 'operation', 'machine']].astype(int)
+    MS = pd.DataFrame(MS, columns=['machine'])
+    MS['O'] = spam['O'].sort_values(ignore_index=True)
+    spam = pd.merge(MS, spam, how='right')
+
+    processing_time = []
+    for i, j in zip(spam['O'], spam['machine']):
+        mask = table_pd['O'] == i
+        processing_time.append(table_pd.loc[mask, j].values[0])
+
+    spam['time'] = processing_time
 
     return spam
