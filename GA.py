@@ -66,13 +66,15 @@ class GA():
             self.mutation_operator()
 
             # 適應值計算
+            ssst = time.time()
             self.F = self.fitness(self.X, self.table_np, self.table_pd)
-
+            eeed = time.time()
             ed = time.time()
             cost = ed - st
             print(f'Iteration : {g + 1}')
             print(f'F_gbest : {self.F_gbest}')
             print(f'cost : {cost}')
+            print(f'{eeed - ssst}')
             print('-' * 20 + '\n')
 
 
@@ -114,7 +116,7 @@ class GA():
     def global_selection(self):
         sequence = np.random.choice(self.job, size=self.job, replace=False)
         MS = pd.DataFrame(columns=['Machine_Selection', 'job', 'operation'])
-        time_array = np.zeros(self.operation)
+        time_array = np.zeros(self.machine)
 
         for idx_job in sequence:
             mask = self.table_pd['job'] == idx_job
@@ -142,7 +144,7 @@ class GA():
         MS = pd.DataFrame(columns=['Machine_Selection', 'job', 'operation'])
 
         for idx_job in sequence:
-            time_array = np.zeros(self.operation)
+            time_array = np.zeros(self.machine)
             mask = self.table_pd['job'] == idx_job
             table = self.table_pd[mask].reset_index(drop=True)
 

@@ -5,6 +5,8 @@ Created on Tue Jan 18 11:05:43 2022
 @author: zongsing.huang
 """
 
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -93,7 +95,7 @@ def fitness(X, table_np, table_pd):
         number_of_machines = table_pd.columns.size - 3
         number_of_jobs = table_pd['job'].unique().size
         pending = get_pending(MS, OS, table_pd)
-        theoretical_limit = int(table_pd.iloc[:, :-3].replace(np.inf, 0).max(axis=0).sum())
+        theoretical_limit = int(table_pd.iloc[:, :-3].replace(np.inf, 0).max(axis=1).sum())
         fastest_start_time = np.zeros(number_of_jobs)
 
         SPACE_columns = ['machine', 'job', 'start', 'end', 'length']
@@ -117,7 +119,8 @@ def fitness(X, table_np, table_pd):
             mask2 = SPACE['job'] == 'idle'
             mask3 = SPACE['length'] >= processing_time
             tb = np.maximum(SPACE['start'], fastest_start_time[assigned_job])
-            mask4 = tb + processing_time <= SPACE['end']
+            mask4 = tb + processing_time - 1 <= SPACE['end']
+
             spam = SPACE[mask1 & mask2 & mask3 & mask4].reset_index(drop=True).loc[0]
 
             # 該筆訂單植入至 GANTT
