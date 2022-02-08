@@ -107,6 +107,7 @@ def fitness(X, table_np, table_pd):
         SPACE['length'] = theoretical_limit
 
         GANTT = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
+        GANTT2 = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
 
         for _, val in pending.iterrows():
             # 取得待處理的機台、工件、所需時間
@@ -120,20 +121,34 @@ def fitness(X, table_np, table_pd):
             mask3 = SPACE['length'] >= processing_time
             tb = np.maximum(SPACE['start'], fastest_start_time[assigned_job])
             mask4 = tb + processing_time - 1 <= SPACE['end']
-
-            spam = SPACE[mask1 & mask2 & mask3 & mask4].reset_index(drop=True).loc[0]
+            available_space = SPACE[mask1 & mask2 & mask3 & mask4].reset_index(drop=True).loc[0]
+            available_space_idx = SPACE[mask1 & mask2 & mask3 & mask4].index[0]
 
             # 該筆訂單植入至 GANTT
-            tb = np.maximum(spam['start'], fastest_start_time[assigned_job])
-            GANTT.loc[spam['machine'], tb:tb+processing_time - 1] = assigned_job
+            tb = np.maximum(available_space['start'], fastest_start_time[assigned_job])
+            if not all(GANTT.loc[available_space['machine'], tb:tb+processing_time - 1].values == -1):
+                print('cover!!!!')
+            GANTT.loc[available_space['machine'], tb:tb+processing_time - 1] = assigned_job
 
-            # 更新 fastest_start_time, SPACE
+            # 更新 SPACE
+            if available_space['length'] == processing_time:
+                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 1_{val['O']}-{_}"
+            elif available_space['start'] >= fastest_start_time[assigned_job]:
+                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 2_{val['O']}-{_}"
+            elif available_space['end'] == tb + processing_time:
+                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 3_{val['O']}-{_}"
+            else:
+                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 4_{val['O']}-{_}"
+            # GANTT2 = GANTT.copy()
+
+            # 更新 fastest_start_time
             fastest_start_time[assigned_job] = tb + processing_time
+
             mask = SPACE['machine'] == assigned_machine
             SPACE.drop(SPACE[mask].index, axis=0, inplace=True)
             SPACE.reset_index(drop=True, inplace=True)
             st, ed, job = -1, -1, None
-            for idx, i in enumerate(GANTT.loc[spam['machine']]):
+            for idx, i in enumerate(GANTT.loc[available_space['machine']]):
                 if i != job and st == -1:
                     st = idx
                     job = i
@@ -141,7 +156,7 @@ def fitness(X, table_np, table_pd):
                     ed = idx - 1
 
                 if st != -1 and ed != -1:
-                    data = {'machine': spam['machine'],
+                    data = {'machine': available_space['machine'],
                             'job': job,
                             'start': st,
                             'end': ed,
@@ -152,7 +167,7 @@ def fitness(X, table_np, table_pd):
             if st != -1 and ed == -1:
                 ed = idx
                 job = i
-                data = {'machine': spam['machine'],
+                data = {'machine': available_space['machine'],
                         'job': job,
                         'start': st,
                         'end': ed,
