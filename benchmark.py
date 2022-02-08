@@ -99,17 +99,20 @@ def fitness(X, table_np, table_pd):
         theoretical_limit = int(table_pd.iloc[:, :-3].replace(np.inf, 0).max(axis=1).sum())
         fastest_start_time = np.zeros(number_of_jobs)
 
-        SPACE_columns = ['machine', 'job', 'start', 'end', 'length']
+        SPACE_columns = ['machine', 'job', 'start', 'end', 'length', 'O']
         SPACE_data = np.zeros([number_of_machines, len(SPACE_columns)])
         SPACE = pd.DataFrame(data=SPACE_data, columns=SPACE_columns)
         SPACE['machine'] = range(number_of_machines)
         SPACE['job'] = 'idle'
         SPACE['end'] = theoretical_limit - 1
         SPACE['length'] = theoretical_limit
+        SPACE['O'] = 'idle'
 
-        GANTT = pd.DataFrame('idle', index=range(number_of_machines), columns=range(theoretical_limit))
+          # 為了提速所以關掉
+        # GANTT = pd.DataFrame('idle', index=range(number_of_machines), columns=range(theoretical_limit))
 
-        for _, val in pending.iterrows():
+        pending = pending.to_dict('records')
+        for val in pending:
             # 取得待處理的機台、工件、所需時間
             assigned_machine = val['machine']
             assigned_job = val['job']
@@ -123,12 +126,13 @@ def fitness(X, table_np, table_pd):
             mask4 = tb + processing_time - 1 <= SPACE['end']
             available_space = SPACE[mask1 & mask2 & mask3 & mask4].reset_index(drop=True).loc[0]
             available_space_idx = SPACE[mask1 & mask2 & mask3 & mask4].index[0]
-
+            SPACE = SPACE.to_dict('records')
             # 該筆訂單植入至 GANTT
             tb = np.maximum(available_space['start'], fastest_start_time[assigned_job])
-            if not all(GANTT.loc[available_space['machine'], tb:tb+processing_time - 1].values == 'idle'):
-                print('cover!!!!')
-            GANTT.loc[available_space['machine'], tb:tb+processing_time - 1] = assigned_job
+            # 為了提速所以關掉
+            # if not all(GANTT.loc[available_space['machine'], tb:tb+processing_time - 1].values == 'idle'):
+            #     print('cover!!!!')
+            # GANTT.loc[available_space['machine'], tb:tb+processing_time - 1] = assigned_job
 
             # 更新 SPACE
             # case 1
@@ -139,7 +143,7 @@ def fitness(X, table_np, table_pd):
                          'end': available_space['end'],
                          'length': processing_time,
                          'O': val['O']}
-                SPACE = SPACE.append(data1, ignore_index=True)
+                SPACE.append(data1)
 
             # case 2
             elif available_space['start'] >= fastest_start_time[assigned_job]:
@@ -157,7 +161,8 @@ def fitness(X, table_np, table_pd):
                          'length': available_space['length'] - processing_time,
                          'O': 'idle'}
 
-                SPACE = SPACE.append([data1, data2], ignore_index=True)
+                SPACE.append(data1)
+                SPACE.append(data2)
 
             # case 3
             elif available_space['end'] == tb + processing_time - 1:
@@ -175,7 +180,8 @@ def fitness(X, table_np, table_pd):
                          'length': processing_time,
                          'O': val['O']}
 
-                SPACE = SPACE.append([data1, data2], ignore_index=True)
+                SPACE.append(data1)
+                SPACE.append(data2)
 
             # case 4
             else:
@@ -200,11 +206,14 @@ def fitness(X, table_np, table_pd):
                          'length': available_space['end'] - (tb + processing_time) + 1,
                          'O': 'idle'}
 
-                SPACE = SPACE.append([data1, data2, data3], ignore_index=True)  # 一次做比較快
+                SPACE.append(data1)
+                SPACE.append(data2)
+                SPACE.append(data3)
 
-            SPACE.drop([available_space_idx], inplace=True)
-            # SPACE.sort_values(['machine', 'start'], inplace=True)  # 非必要，拖速度
-            SPACE.reset_index(drop=True, inplace=True)
+            del SPACE[available_space_idx]
+            SPACE = pd.DataFrame(SPACE)
+            # 為了提速所以關掉
+            # SPACE.sort_values(['machine', 'start'], inplace=True)
 
             # 更新 fastest_start_time
             fastest_start_time[assigned_job] = tb + processing_time

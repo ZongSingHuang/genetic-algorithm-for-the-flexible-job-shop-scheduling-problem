@@ -14,7 +14,7 @@ import pandas as pd
 from GA import GA
 import benchmark
 
-G = 100
+G = 10
 P = 20
 run_times = 1
 item = -1
