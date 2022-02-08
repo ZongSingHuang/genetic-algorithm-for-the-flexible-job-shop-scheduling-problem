@@ -5,6 +5,8 @@ Created on Tue Jan 18 11:05:43 2022
 @author: zongsing.huang
 """
 
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -87,7 +89,10 @@ class decoding:
 def fitness(X, table_np, table_pd):
     D = int(X.shape[1] / 2)
     F = []
+
+    st0 = time.time()
     for _, row in enumerate(X):
+        st1 = time.time()
         MS = row[:D]
         OS = row[D:]
         number_of_machines = table_pd.columns.size - 3
@@ -106,7 +111,10 @@ def fitness(X, table_np, table_pd):
 
         GANTT = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
         GANTT.replace(-1, 'idle', inplace=True)
+        ed1 = time.time()
+        # print(f'解碼 : {ed1 - st1}')
 
+        st2 = time.time()
         for _, val in pending.iterrows():
             # 取得待處理的機台、工件、所需時間
             assigned_machine = val['machine']
@@ -147,14 +155,15 @@ def fitness(X, table_np, table_pd):
                          'end': tb + processing_time - 1,
                          'length': processing_time,
                          'O': val['O']}
-                SPACE = SPACE.append(data1, ignore_index=True)
+
                 data2 = {'machine': available_space['machine'],
                          'job': 'idle',
                          'start': tb + processing_time,
                          'end': available_space['end'],
                          'length': available_space['length'] - processing_time,
                          'O': 'idle'}
-                SPACE = SPACE.append(data2, ignore_index=True)
+
+                SPACE = SPACE.append([data1, data2], ignore_index=True)
 
             # case 3
             elif available_space['end'] == tb + processing_time - 1:
@@ -164,14 +173,15 @@ def fitness(X, table_np, table_pd):
                          'end': available_space['end'] - processing_time,
                          'length': available_space['length'] - processing_time,
                          'O': 'idle'}
-                SPACE = SPACE.append(data1, ignore_index=True)
+
                 data2 = {'machine': available_space['machine'],
                          'job': assigned_job,
                          'start': tb + processing_time - 1,
                          'end': available_space['end'],
                          'length': processing_time,
                          'O': val['O']}
-                SPACE = SPACE.append(data2, ignore_index=True)
+
+                SPACE = SPACE.append([data1, data2], ignore_index=True)
 
             # case 4
             else:
@@ -181,32 +191,37 @@ def fitness(X, table_np, table_pd):
                          'end': tb - 1,
                          'length': tb - available_space['start'],
                          'O': 'idle'}
-                SPACE = SPACE.append(data1, ignore_index=True)
+
                 data2 = {'machine': available_space['machine'],
                          'job': assigned_job,
                          'start': tb,
                          'end': tb + processing_time - 1,
                          'length': processing_time,
                          'O': val['O']}
-                SPACE = SPACE.append(data2, ignore_index=True)
+
                 data3 = {'machine': available_space['machine'],
                          'job': 'idle',
                          'start': tb + processing_time,
                          'end': available_space['end'],
                          'length': available_space['end'] - (tb + processing_time) + 1,
                          'O': 'idle'}
-                SPACE = SPACE.append(data3, ignore_index=True)
+
+                SPACE = SPACE.append([data1, data2, data3], ignore_index=True)  # 一次做比較快
 
             SPACE.drop([available_space_idx], inplace=True)
-            SPACE.sort_values(['machine', 'start'], inplace=True)
+            # SPACE.sort_values(['machine', 'start'], inplace=True)  # 非必要，拖速度
             SPACE.reset_index(drop=True, inplace=True)
 
             # 更新 fastest_start_time
             fastest_start_time[assigned_job] = tb + processing_time
 
         F.append(fastest_start_time.max())
+        ed2 = time.time()
+        # print(f'甘特圖 : {ed2 - st2}')
 
     F = np.array(F)
+    ed0 = time.time()
+    print(f'整體 : {ed0 - st0}')
 
     return F
 
