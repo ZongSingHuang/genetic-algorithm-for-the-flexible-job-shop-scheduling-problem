@@ -5,8 +5,6 @@ Created on Tue Jan 18 11:05:43 2022
 @author: zongsing.huang
 """
 
-import time
-
 import numpy as np
 import pandas as pd
 
@@ -90,14 +88,14 @@ def fitness(X, table_np, table_pd):
     D = int(X.shape[1] / 2)
     F = []
 
-    st0 = time.time()
     for _, row in enumerate(X):
-        st1 = time.time()
         MS = row[:D]
         OS = row[D:]
         number_of_machines = table_pd.columns.size - 3
         number_of_jobs = table_pd['job'].unique().size
+
         pending = get_pending(MS, OS, table_pd)
+
         theoretical_limit = int(table_pd.iloc[:, :-3].replace(np.inf, 0).max(axis=1).sum())
         fastest_start_time = np.zeros(number_of_jobs)
 
@@ -109,12 +107,8 @@ def fitness(X, table_np, table_pd):
         SPACE['end'] = theoretical_limit - 1
         SPACE['length'] = theoretical_limit
 
-        GANTT = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
-        GANTT.replace(-1, 'idle', inplace=True)
-        ed1 = time.time()
-        # print(f'解碼 : {ed1 - st1}')
+        GANTT = pd.DataFrame('idle', index=range(number_of_machines), columns=range(theoretical_limit))
 
-        st2 = time.time()
         for _, val in pending.iterrows():
             # 取得待處理的機台、工件、所需時間
             assigned_machine = val['machine']
@@ -216,33 +210,27 @@ def fitness(X, table_np, table_pd):
             fastest_start_time[assigned_job] = tb + processing_time
 
         F.append(fastest_start_time.max())
-        ed2 = time.time()
-        # print(f'甘特圖 : {ed2 - st2}')
 
     F = np.array(F)
-    ed0 = time.time()
-    print(f'整體 : {ed0 - st0}')
 
     return F
 
 
 def get_pending(MS, OS, table_pd):
+    pending = table_pd.copy()
+    pending['machine'] = MS
+    pending.set_index('O', drop=False, inplace=True)
+
     spam = pd.DataFrame(OS, columns=['job'])
-    spam['operation'] = -1
     for job in set(OS):
         mask = spam['job'] == job
         spam.loc[mask, 'operation'] = range(mask.sum())
+    spam['operation'] = spam['operation'].astype(int)
     spam['O'] = spam['job'].astype(str) + spam['operation'].astype(str)
 
-    MS = pd.DataFrame(MS, columns=['machine'])
-    MS['O'] = spam['O'].sort_values(ignore_index=True)
-    spam = pd.merge(MS, spam, how='right')
+    pending = pending.loc[spam['O']]
+    pending['time'] = [pending.loc[i, j] for i, j in zip(pending['O'], pending['machine'])]
 
-    processing_time = []
-    for i, j in zip(spam['O'], spam['machine']):
-        mask = table_pd['O'] == i
-        processing_time.append(table_pd.loc[mask, j].values[0])
+    pending = pending[['machine', 'O', 'job', 'operation', 'time']].reset_index(drop=True)
 
-    spam['time'] = processing_time
-
-    return spam
+    return pending

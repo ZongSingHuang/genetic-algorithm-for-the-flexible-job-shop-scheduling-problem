@@ -16,7 +16,7 @@ import benchmark
 
 G = 100
 P = 20
-run_times = 5
+run_times = 1
 item = -1
 table = pd.DataFrame(np.zeros([10, 7]), columns=['nxm', 'To', 'Flex.', 'LB, UB', 'Cm', 'AV(Cm)', 't'])
 table['Cm'] = np.inf
