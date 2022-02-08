@@ -77,8 +77,7 @@ class GA():
             print(f'{eeed - ssst}')
             print('-' * 20 + '\n')
 
-
-#%% 初始化
+# %% 初始化
     def initial_population(self):
         X1 = []
 
@@ -188,8 +187,7 @@ class GA():
 
         return MS
 
-
-#%% 選擇
+# %% 選擇
     def selection_operator(self):
         X_new = np.zeros_like(self.X)
         for i in range(self.P):
@@ -207,8 +205,7 @@ class GA():
 
         return c1
 
-
-#%% 交配
+# %% 交配
     def crossover_operator(self):
         for i in range(self.P):
             p = np.random.uniform()
@@ -288,8 +285,7 @@ class GA():
 
         return c1, c2
 
-
-#%% 突變
+# %% 突變
     def mutation_operator(self):
         for i in range(self.P):
             p1 = self.X[i].copy()
@@ -328,8 +324,7 @@ class GA():
 
         return c1
 
-
-#%% 其他
+# %% 其他
     def plot_curve(self):
         plt.figure()
         plt.title('loss curve ['+str(round(self.gBest_curve[-1], 3))+']')

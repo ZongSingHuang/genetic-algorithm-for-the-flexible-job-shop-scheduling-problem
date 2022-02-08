@@ -5,8 +5,6 @@ Created on Tue Jan 18 11:05:43 2022
 @author: zongsing.huang
 """
 
-import time
-
 import numpy as np
 import pandas as pd
 
@@ -107,7 +105,7 @@ def fitness(X, table_np, table_pd):
         SPACE['length'] = theoretical_limit
 
         GANTT = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
-        GANTT2 = pd.DataFrame(np.zeros([number_of_machines, theoretical_limit]) - 1, dtype=int)
+        GANTT.replace(-1, 'idle', inplace=True)
 
         for _, val in pending.iterrows():
             # 取得待處理的機台、工件、所需時間
@@ -126,55 +124,85 @@ def fitness(X, table_np, table_pd):
 
             # 該筆訂單植入至 GANTT
             tb = np.maximum(available_space['start'], fastest_start_time[assigned_job])
-            if not all(GANTT.loc[available_space['machine'], tb:tb+processing_time - 1].values == -1):
+            if not all(GANTT.loc[available_space['machine'], tb:tb+processing_time - 1].values == 'idle'):
                 print('cover!!!!')
             GANTT.loc[available_space['machine'], tb:tb+processing_time - 1] = assigned_job
 
             # 更新 SPACE
+            # case 1
             if available_space['length'] == processing_time:
-                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 1_{val['O']}-{_}"
+                data1 = {'machine': available_space['machine'],
+                         'job': assigned_job,
+                         'start': available_space['start'],
+                         'end': available_space['end'],
+                         'length': processing_time,
+                         'O': val['O']}
+                SPACE = SPACE.append(data1, ignore_index=True)
+
+            # case 2
             elif available_space['start'] >= fastest_start_time[assigned_job]:
-                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 2_{val['O']}-{_}"
-            elif available_space['end'] == tb + processing_time:
-                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 3_{val['O']}-{_}"
+                data1 = {'machine': available_space['machine'],
+                         'job': assigned_job,
+                         'start': tb,
+                         'end': tb + processing_time - 1,
+                         'length': processing_time,
+                         'O': val['O']}
+                SPACE = SPACE.append(data1, ignore_index=True)
+                data2 = {'machine': available_space['machine'],
+                         'job': 'idle',
+                         'start': tb + processing_time,
+                         'end': available_space['end'],
+                         'length': available_space['length'] - processing_time,
+                         'O': 'idle'}
+                SPACE = SPACE.append(data2, ignore_index=True)
+
+            # case 3
+            elif available_space['end'] == tb + processing_time - 1:
+                data1 = {'machine': available_space['machine'],
+                         'job': 'idle',
+                         'start': available_space['start'],
+                         'end': available_space['end'] - processing_time,
+                         'length': available_space['length'] - processing_time,
+                         'O': 'idle'}
+                SPACE = SPACE.append(data1, ignore_index=True)
+                data2 = {'machine': available_space['machine'],
+                         'job': assigned_job,
+                         'start': tb + processing_time - 1,
+                         'end': available_space['end'],
+                         'length': processing_time,
+                         'O': val['O']}
+                SPACE = SPACE.append(data2, ignore_index=True)
+
+            # case 4
             else:
-                GANTT2.loc[available_space['machine'], tb:tb+processing_time - 1] = f"CASE 4_{val['O']}-{_}"
-            # GANTT2 = GANTT.copy()
+                data1 = {'machine': available_space['machine'],
+                         'job': 'idle',
+                         'start': available_space['start'],
+                         'end': tb - 1,
+                         'length': tb - available_space['start'],
+                         'O': 'idle'}
+                SPACE = SPACE.append(data1, ignore_index=True)
+                data2 = {'machine': available_space['machine'],
+                         'job': assigned_job,
+                         'start': tb,
+                         'end': tb + processing_time - 1,
+                         'length': processing_time,
+                         'O': val['O']}
+                SPACE = SPACE.append(data2, ignore_index=True)
+                data3 = {'machine': available_space['machine'],
+                         'job': 'idle',
+                         'start': tb + processing_time,
+                         'end': available_space['end'],
+                         'length': available_space['end'] - (tb + processing_time) + 1,
+                         'O': 'idle'}
+                SPACE = SPACE.append(data3, ignore_index=True)
+
+            SPACE.drop([available_space_idx], inplace=True)
+            SPACE.sort_values(['machine', 'start'], inplace=True)
+            SPACE.reset_index(drop=True, inplace=True)
 
             # 更新 fastest_start_time
             fastest_start_time[assigned_job] = tb + processing_time
-
-            mask = SPACE['machine'] == assigned_machine
-            SPACE.drop(SPACE[mask].index, axis=0, inplace=True)
-            SPACE.reset_index(drop=True, inplace=True)
-            st, ed, job = -1, -1, None
-            for idx, i in enumerate(GANTT.loc[available_space['machine']]):
-                if i != job and st == -1:
-                    st = idx
-                    job = i
-                elif i != job and st != -1:
-                    ed = idx - 1
-
-                if st != -1 and ed != -1:
-                    data = {'machine': available_space['machine'],
-                            'job': job,
-                            'start': st,
-                            'end': ed,
-                            'length': ed - st + 1}
-                    SPACE = SPACE.append(data, ignore_index=True)
-                    st, ed, job = idx, -1, i
-
-            if st != -1 and ed == -1:
-                ed = idx
-                job = i
-                data = {'machine': available_space['machine'],
-                        'job': job,
-                        'start': st,
-                        'end': ed,
-                        'length': ed - st + 1}
-                SPACE = SPACE.append(data, ignore_index=True)
-
-            SPACE['job'].replace(-1, 'idle', inplace=True)
 
         F.append(fastest_start_time.max())
 
